@@ -1,0 +1,6 @@
+{
+  "name": "CipherTrace",
+  "description": "Enterprise AI Security & Sensitive Data Redaction Gateway with Microsoft Presidio and Token Vault.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
