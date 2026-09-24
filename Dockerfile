@@ -2,6 +2,7 @@ FROM node:22-bookworm
 
 WORKDIR /app
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-venv \
@@ -9,20 +10,25 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json ./
-RUN npm install
+# Copy package files and install with legacy peer deps to avoid version conflicts
+COPY package*.json ./
+RUN npm install --legacy-peer-deps
 
+# Set up Python virtual environment
 RUN python3 -m venv /opt/venv
 
+# Install Python requirements
 COPY backend/presidio/requirements.txt /tmp/requirements.txt
-
 RUN /opt/venv/bin/pip install --upgrade pip && \
     /opt/venv/bin/pip install -r /tmp/requirements.txt
 
+# Add venv to PATH
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Copy the rest of the application files
 COPY . .
 
+# Build step (uses legacy peer deps fallback if needed)
 RUN npm run build
 
 ENV NODE_ENV=production
