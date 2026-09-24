@@ -5,7 +5,8 @@ import { spawn, ChildProcess } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 import { createBackendApp } from './backend/src/server.js';
 
-const PORT = Number(process.env.PORT) || 3000;
+// Default to 10000 to match Dockerfile EXPOSE 10000 on Render
+const PORT = Number(process.env.PORT) || 10000;
 
 function getRootDir(): string {
   if (fs.existsSync(path.join(process.cwd(), 'backend', 'presidio', 'app.py'))) {
@@ -30,12 +31,17 @@ function startPythonPresidioService() {
     return;
   }
 
+  // Use Python binary inside the virtual environment created by Dockerfile if available
+  const pythonBin = fs.existsSync('/opt/venv/bin/python3')
+    ? '/opt/venv/bin/python3'
+    : (fs.existsSync('/opt/venv/bin/python') ? '/opt/venv/bin/python' : 'python3');
+
   try {
-    console.log('[PresidioLauncher] Launching Microsoft Presidio service on port 5001...');
-    pythonProc = spawn('python3', [pythonScript], {
+    console.log(`[PresidioLauncher] Launching Microsoft Presidio service using ${pythonBin}...`);
+    pythonProc = spawn(pythonBin, [pythonScript], {
       env: {
         ...process.env,
-        PRESIDIO_PORT: '5001',
+        PRESIDIO_PORT: process.env.PRESIDIO_PORT || '5001',
         PYTHONUNBUFFERED: '1',
       },
       cwd: path.join(rootDir, 'backend', 'presidio'),
@@ -53,7 +59,7 @@ function startPythonPresidioService() {
     });
 
     pythonProc.on('error', (err) => {
-      console.warn('[PresidioLauncher] Could not launch Python service directly:', err.message);
+      console.warn('[PresidioLauncher] Could not launch Python service:', err.message);
     });
 
     pythonProc.on('exit', (code, signal) => {
@@ -68,7 +74,10 @@ function startPythonPresidioService() {
 function serveStatic(app: express.Express) {
   const rootDir = getRootDir();
   const distPath = path.join(rootDir, 'dist');
+  
   app.use(express.static(distPath));
+  
+  // SPA fallback for frontend routing
   app.get('*', (_req, res) => {
     const indexPath = path.join(distPath, 'index.html');
     if (fs.existsSync(indexPath)) {
@@ -80,17 +89,21 @@ function serveStatic(app: express.Express) {
 }
 
 async function startServer() {
-  // Start Python Presidio service
+  // Start Python Presidio background service
   startPythonPresidioService();
 
   const app = createBackendApp();
+
+  // Basic health check endpoint for Render
+  app.get('/healthz', (_req, res) => {
+    res.status(200).send('OK');
+  });
 
   const isProduction =
     process.env.NODE_ENV === 'production' ||
     Boolean(process.argv[1]?.endsWith('server.cjs')) ||
     Boolean(process.argv[1]?.endsWith('server.js'));
 
-  // In development, hook up Vite dev server middleware
   if (!isProduction) {
     try {
       const vite = await createViteServer({
@@ -103,7 +116,6 @@ async function startServer() {
       serveStatic(app);
     }
   } else {
-    // Production static serving
     serveStatic(app);
   }
 
