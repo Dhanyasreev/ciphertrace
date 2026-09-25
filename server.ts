@@ -23,6 +23,24 @@ function getRootDir(): string {
 
 let pythonProc: ChildProcess | null = null;
 
+function resolvePythonBinary(): string {
+  // Docker / Linux virtual environment check
+  if (fs.existsSync('/opt/venv/bin/python3')) {
+    return '/opt/venv/bin/python3';
+  }
+  if (fs.existsSync('/opt/venv/bin/python')) {
+    return '/opt/venv/bin/python';
+  }
+
+  // Windows system defaults
+  if (process.platform === 'win32') {
+    return process.env.PYTHON || 'python';
+  }
+
+  // Unix/Linux/macOS defaults
+  return 'python3';
+}
+
 function startPythonPresidioService() {
   const rootDir = getRootDir();
   const pythonScript = path.join(rootDir, 'backend', 'presidio', 'app.py');
@@ -31,10 +49,8 @@ function startPythonPresidioService() {
     return;
   }
 
-  // Use Python binary inside the virtual environment created by Dockerfile if available
-  const pythonBin = fs.existsSync('/opt/venv/bin/python3')
-    ? '/opt/venv/bin/python3'
-    : (fs.existsSync('/opt/venv/bin/python') ? '/opt/venv/bin/python' : 'python3');
+  const pythonBin = resolvePythonBinary();
+  const isWindows = process.platform === 'win32';
 
   try {
     console.log(`[PresidioLauncher] Launching Microsoft Presidio service using ${pythonBin}...`);
@@ -46,6 +62,7 @@ function startPythonPresidioService() {
       },
       cwd: path.join(rootDir, 'backend', 'presidio'),
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWindows, // Ensures Windows resolves commands from PATH properly
     });
 
     pythonProc.stdout?.on('data', (data) => {
